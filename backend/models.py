@@ -1,5 +1,25 @@
 from django.db import models
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AbstractUser
+
+
+class User(AbstractUser):
+    is_active = models.BooleanField(default=False)
+    phone = models.CharField(max_length=15, blank=True)
+
+    groups = models.ManyToManyField(
+        'auth.Group',
+        verbose_name='groups',
+        blank=True,
+        help_text='The groups this user belongs to.',
+        related_name='backend_user_set'
+    )
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        verbose_name='user permissions',
+        blank=True,
+        help_text='Specific permissions for this user.',
+        related_name='backend_user_set'
+    )
 
 class Shop(models.Model):
     name = models.CharField(max_length=50, verbose_name='Название магазина')
@@ -103,6 +123,7 @@ class Order(models.Model):
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE, verbose_name='Заказ')
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name='Продукт')
+    product_info = models.ForeignKey(ProductInfo, related_name='order_items', on_delete=models.CASCADE, verbose_name='Информация о продукте')
     shop = models.ForeignKey(Shop, on_delete=models.CASCADE, verbose_name='Магазин')
     quantity = models.PositiveIntegerField(verbose_name='Количество')
 

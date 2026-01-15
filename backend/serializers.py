@@ -1,6 +1,35 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem, Contact
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework import serializers
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password']
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password']
+        )
+        return user
+
+
+class ContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Contact
+        fields = '__all__'
+        read_only_fields = ('user',)
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -53,16 +82,16 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = ['name', 'description', 'product_infos', 'parameters']
 
 class CartItemSerializer(serializers.ModelSerializer):
-    product_name = serializers.ReadOnlyField(source='product.name')
-    shop_name = serializers.ReadOnlyField(source='shop.name')
-    total_price = serializers.SerializerMethodField()
-
-    def get_total_price(self, obj):
-        return obj.quantity * obj.product_info.price
+    product = serializers.StringRelatedField(source='product_info.product')
+    price = serializers.IntegerField(source='product_info.price')
+    total = serializers.SerializerMethodField()
 
     class Meta:
         model = OrderItem
-        fields = ['id', 'product_name', 'shop_name', 'quantity', 'product_info__price', 'total_price']
+        fields = ['id', 'product', 'price', 'quantity', 'total']
+
+    def get_total(self, obj):
+        return obj.product_info.price * obj.quantity
 
 class OrderSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)

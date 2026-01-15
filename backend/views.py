@@ -7,88 +7,109 @@ from django.core.exceptions import ValidationError
 from requests import get
 from .models import Shop, Category, Product, ProductInfo, Parameter, ProductParameter
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
 # Заголовки этапа 4
+from backend.services.partner_import import import_partner_data
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+# from rest_framework.permissions import IsAuthenticated
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from .models import *
 from .serializers import *
+from rest_framework.permissions import IsAuthenticated, BasePermission
+# Заголовки email
+from django.core.mail import send_mail
+from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from rest_framework import status
 
-@method_decorator(csrf_exempt, name='dispatch')
-class PartnerUpdate(View):
+from .serializers import RegisterSerializer
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+class RegisterView(APIView):
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+
+        confirm_url = f"http://127.0.0.1:8000/api/confirm/{uid}/{token}/"
+
+        send_mail(
+            'Подтверждение регистрации',
+            f'Перейдите по ссылке: {confirm_url}',
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+        )
+
+        return Response(
+            {'detail': 'Письмо с подтверждением отправлено'},
+            status=status.HTTP_201_CREATED
+        )
+
+class IsPartner(BasePermission):
+    message = 'Доступ только для партнёров'
+
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.type == 'shop'
+
+class ConfirmEmailView(APIView):
+    def get(self, request, uid, token):
+        try:
+            uid = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=uid)
+        except Exception:
+            return Response({'detail': 'Неверная ссылка'}, status=400)
+
+        if default_token_generator.check_token(user, token):
+            user.is_active = True
+            user.save()
+            return Response({'detail': 'Email подтверждён'})
+        return Response({'detail': 'Ссылка недействительна'}, status=400)
+
+class ContactView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ContactSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        contact = serializer.save(user=request.user)
+
+        send_mail(
+            subject='Адрес доставки сохранён',
+            message='Вы успешно добавили адрес доставки.',
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[request.user.email],
+        )
+
+        return Response({'Status': True, 'Data': serializer.data})
+
+class PartnerUpdate(APIView):
     """
     Класс для обновления прайса от поставщика
     """
+    permission_classes = [IsAuthenticated]
 
-    def post(self, request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
-
-        # Проверка типа пользователя (если реализовано поле user.type)
-        # if getattr(request.user, 'type', '') != 'shop':
-        #     return JsonResponse({'Status': False, 'Error': 'Только для магазинов'}, status=403)
-
+    def post(self, request):
         url = request.data.get('url')
-        if url:
-            validate_url = URLValidator()
-            try:
-                validate_url(url)
-            except ValidationError as e:
-                return JsonResponse({'Status': False, 'Error': str(e)})
-            else:
-                try:
-                    response = get(url)
-                    response.raise_for_status()
-                    data = yaml.safe_load(response.content)
-                except Exception as e:
-                    return JsonResponse({'Status': False, 'Error': f'Ошибка загрузки файла: {str(e)}'})
 
-                shop, _ = Shop.objects.get_or_create(name=data['shop'])  # Или используйте user_id
+        if not url:
+            return Response({'Status': False, 'Error': 'Не указан URL'}, status=400)
 
-                # Обработка категорий
-                for category_data in data.get('categories', []):
-                    category_obj, _ = Category.objects.get_or_create(
-                        id=category_data['id'],
-                        defaults={'name': category_data['name']}
-                    )
-                    category_obj.shops.add(shop)
+        try:
+            import_partner_data(request.user, url)
+        except Exception as e:
+            return Response({'Status': False, 'Error': str(e)}, status=400)
 
-                # Очистка старых данных
-                ProductInfo.objects.filter(shop=shop).delete()
+        return Response({'Status': True})
 
-                # Обработка товаров
-                for item in data.get('goods', []):
-                    product, _ = Product.objects.get_or_create(
-                        name=item['name'],
-                        category_id=item['category']
-                    )
-
-                    product_info = ProductInfo.objects.create(
-                        external_id=item['id'],
-                        product=product,
-                        shop=shop,
-                        name=item['name'],
-                        price=item['price'],
-                        price_rrc=item['price_rrc'],
-                        quantity=item['quantity']
-                    )
-
-                    # Обработка параметров
-                    for param_name, param_value in item.get('parameters', {}).items():
-                        parameter_obj, _ = Parameter.objects.get_or_create(name=param_name)
-                        ProductParameter.objects.create(
-                            product_info=product_info,
-                            parameter=parameter_obj,
-                            value=param_value
-                        )
-
-                return JsonResponse({'Status': True})
-
-        return JsonResponse({'Status': False, 'Errors': 'Не указан URL'})
 
 class RegisterAPIView(APIView):
     def post(self, request):

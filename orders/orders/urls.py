@@ -28,4 +28,6 @@ urlpatterns = [
     path('contacts/', ContactsAPIView.as_view()),
     path('confirm_order/', ConfirmOrderAPIView.as_view()),
     path('orders/', OrdersListAPIView.as_view()),
+    path('register/', RegisterView.as_view()),
+    path('confirm/<uid>/<token>/', ConfirmEmailView.as_view()),
 ]
