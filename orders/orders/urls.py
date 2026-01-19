@@ -21,7 +21,7 @@ from backend.views import *
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('partner/update', PartnerUpdate.as_view(), name='partner-update'),
-    path('register/', RegisterAPIView.as_view()),
+    # path('register/', RegisterAPIView.as_view()),
     path('login/', LoginAPIView.as_view()),
     path('products/', ProductsListAPIView.as_view()),
     path('cart/', CartAPIView.as_view()),

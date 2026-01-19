@@ -25,14 +25,16 @@ from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from rest_framework import status
 
-from .serializers import RegisterSerializer
 from django.contrib.auth import get_user_model
+
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 
 User = get_user_model()
 
 class RegisterView(APIView):
     def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
+        serializer = RegisterUserSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
@@ -57,8 +59,8 @@ class IsPartner(BasePermission):
     message = 'Доступ только для партнёров'
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.type == 'shop'
-
+        return request.user.is_authenticated
+        
 class ConfirmEmailView(APIView):
     def get(self, request, uid, token):
         try:
@@ -109,16 +111,6 @@ class PartnerUpdate(APIView):
             return Response({'Status': False, 'Error': str(e)}, status=400)
 
         return Response({'Status': True})
-
-
-class RegisterAPIView(APIView):
-    def post(self, request):
-        serializer = RegisterUserSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            token, _ = Token.objects.get_or_create(user=user)
-            return Response({'token': token.key})
-        return Response(serializer.errors, status=400)
 
 class LoginAPIView(APIView):
     def post(self, request):

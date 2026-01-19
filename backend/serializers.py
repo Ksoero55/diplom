@@ -9,21 +9,23 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-class RegisterSerializer(serializers.ModelSerializer):
+class RegisterUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password']
+        fields = ('first_name', 'last_name', 'email', 'password')
 
     def create(self, validated_data):
+        # Генерируем username из email
         user = User.objects.create_user(
-            username=validated_data['username'],
+            username=validated_data['email'],  # Используем email как username
             email=validated_data['email'],
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name'],
             password=validated_data['password']
         )
         return user
-
 
 class ContactSerializer(serializers.ModelSerializer):
     class Meta:
@@ -36,8 +38,6 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ('first_name', 'last_name', 'email')
 
-class RegisterUserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
 
     class Meta:
         model = User

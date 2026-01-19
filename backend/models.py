@@ -100,6 +100,7 @@ class ProductParameter(models.Model):
 
 class Order(models.Model):
     STATUS_CHOICES = [
+        ('cart', 'Корзина'),
         ('new', 'Новый'),
         ('confirmed', 'Подтвержден'),
         ('assembled', 'Собран'),
@@ -109,6 +110,12 @@ class Order(models.Model):
     ]
 
     user = models.ForeignKey(User, related_name='orders', on_delete=models.CASCADE, verbose_name='Пользователь')
+    contact = models.ForeignKey(
+        'Contact',
+        related_name='orders',
+        on_delete=models.CASCADE,
+        verbose_name='Контакт для доставки'
+    )
     dt = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
     status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='new', verbose_name='Статус')
 
